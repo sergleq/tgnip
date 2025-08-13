@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  tgnip-bot:
+    build: .
+    container_name: tgnip-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - tgnip-network
+
+networks:
+  tgnip-network:
+    driver: bridge
