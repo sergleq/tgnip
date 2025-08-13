@@ -643,10 +643,10 @@ func normalizeLanguageName(name string) string {
 
 	// Если не нашли в маппинге, но это похоже на язык (короткое название без пробелов)
 	if len(name) > 0 && len(name) <= 20 && !strings.Contains(name, " ") {
-		return "c" // Fallback на язык C для неизвестных языков
+		return "go" // Fallback на язык C для неизвестных языков
 	}
 
-	return ""
+	return "go"
 }
 
 // convertTableToMarkdown конвертирует HTML таблицу в markdown формат
