@@ -83,7 +83,7 @@ func extractContent(pageURL string) (*Content, error) {
 	}
 
 	// Извлекаем основной текст и конвертируем в markdown с сохраненными языками
-	content.Markdown = extractAndConvertToMarkdownWithLanguages(article, languages)
+	content.Markdown = extractAndConvertToMarkdown(article, languages)
 
 	// Извлекаем автора
 	if article.Byline != "" {
@@ -134,40 +134,6 @@ func extractTitle(doc *goquery.Document) string {
 	}
 
 	return "Без заголовка"
-}
-
-// extractMainText извлекает основной текст статьи
-func extractMainText(doc *goquery.Document) string {
-	// Удаляем ненужные элементы
-	doc.Find("script, style, nav, header, footer, .sidebar, .advertisement, .ads, .comments, .social-share").Remove()
-
-	// Пробуем найти основной контент
-	selectors := []string{
-		"article",
-		".post-content",
-		".article-content",
-		".entry-content",
-		".content",
-		"main",
-		".main-content",
-		"#content",
-		".post-body",
-		".article-body",
-	}
-
-	for _, selector := range selectors {
-		content := doc.Find(selector).First()
-		if content.Length() > 0 {
-			text := content.Text()
-			if len(text) > 100 { // Минимальная длина для валидного контента
-				return text
-			}
-		}
-	}
-
-	// Если не нашли основной контент, берем весь body
-	body := doc.Find("body").Text()
-	return body
 }
 
 // extractAuthor извлекает автора статьи
@@ -260,19 +226,7 @@ func isValidURL(str string) bool {
 }
 
 // extractAndConvertToMarkdown извлекает контент и конвертирует его в markdown
-func extractAndConvertToMarkdown(article readability.Article) string {
-	if article.Content == "" {
-		return ""
-	}
-
-	// Извлекаем языки программирования в порядке их появления
-	languages := extractCodeLanguagesInOrder(article.Content)
-
-	return extractAndConvertToMarkdownWithLanguages(article, languages)
-}
-
-// extractAndConvertToMarkdownWithLanguages извлекает контент и конвертирует его в markdown с предварительно извлеченными языками
-func extractAndConvertToMarkdownWithLanguages(article readability.Article, languages []string) string {
+func extractAndConvertToMarkdown(article readability.Article, languages []string) string {
 	if article.Content == "" {
 		return ""
 	}

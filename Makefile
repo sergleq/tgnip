@@ -8,7 +8,7 @@ help: ## Показать справку
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 build: ## Собрать приложение
-	go build -o $(BINARY_NAME) .
+	go build -ldflags="-s -w" -o $(BINARY_NAME) .
 
 run: ## Запустить приложение
 	go run .

@@ -23,54 +23,19 @@ func TestGetLocale(t *testing.T) {
 			expectedLocale: "en",
 		},
 		{
-			name:           "Spanish language",
-			languageCode:   "es",
-			expectedLocale: "es",
-		},
-		{
-			name:           "French language",
-			languageCode:   "fr",
-			expectedLocale: "fr",
-		},
-		{
-			name:           "German language",
-			languageCode:   "de",
-			expectedLocale: "de",
-		},
-		{
-			name:           "Italian language",
-			languageCode:   "it",
-			expectedLocale: "it",
-		},
-		{
-			name:           "Portuguese language",
-			languageCode:   "pt",
-			expectedLocale: "pt",
-		},
-		{
-			name:           "Chinese language",
-			languageCode:   "zh",
-			expectedLocale: "zh",
-		},
-		{
-			name:           "Japanese language",
-			languageCode:   "ja",
-			expectedLocale: "ja",
-		},
-		{
 			name:           "English US variant",
 			languageCode:   "en-US",
 			expectedLocale: "en",
 		},
 		{
-			name:           "Unknown language defaults to Russian",
+			name:           "Unknown language defaults to English",
 			languageCode:   "unknown",
-			expectedLocale: "ru",
+			expectedLocale: "en",
 		},
 		{
-			name:           "Empty language defaults to Russian",
+			name:           "Empty language defaults to English",
 			languageCode:   "",
-			expectedLocale: "ru",
+			expectedLocale: "en",
 		},
 	}
 
@@ -101,7 +66,7 @@ func TestGetSupportedLanguages(t *testing.T) {
 	languages := getSupportedLanguages()
 
 	// Проверяем, что все поддерживаемые языки присутствуют
-	expectedLanguages := []string{"ru", "en", "es", "fr", "de", "it", "pt", "zh", "ja"}
+	expectedLanguages := []string{"ru", "en"}
 
 	if len(languages) != len(expectedLanguages) {
 		t.Errorf("Expected %d languages, got %d", len(expectedLanguages), len(languages))
@@ -147,7 +112,7 @@ func TestLocaleStructure(t *testing.T) {
 }
 
 func TestDefaultLocale(t *testing.T) {
-	// Проверяем, что при отсутствии языка пользователя возвращается русский
+	// Проверяем, что при отсутствии языка пользователя возвращается английский
 	message := &tgbotapi.Message{
 		From: &tgbotapi.User{
 			LanguageCode: "",
@@ -155,23 +120,23 @@ func TestDefaultLocale(t *testing.T) {
 	}
 
 	locale := getLocale(message)
-	expectedLocale := locales["ru"]
+	expectedLocale := locales["en"]
 
 	if locale.WelcomeMessage != expectedLocale.WelcomeMessage {
-		t.Error("Default locale should be Russian")
+		t.Error("Default locale should be English")
 	}
 }
 
 func TestNilUser(t *testing.T) {
-	// Проверяем, что при отсутствии информации о пользователе возвращается русский
+	// Проверяем, что при отсутствии информации о пользователе возвращается английский
 	message := &tgbotapi.Message{
 		From: nil,
 	}
 
 	locale := getLocale(message)
-	expectedLocale := locales["ru"]
+	expectedLocale := locales["en"]
 
 	if locale.WelcomeMessage != expectedLocale.WelcomeMessage {
-		t.Error("Should return Russian locale when user is nil")
+		t.Error("Should return English locale when user is nil")
 	}
 }
