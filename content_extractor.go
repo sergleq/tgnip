@@ -61,6 +61,9 @@ func extractContent(pageURL string) (*Content, error) {
 		return nil, fmt.Errorf("ошибка при парсинге URL: %w", err)
 	}
 
+	// ИЗВЛЕКАЕМ ЯЗЫКИ ПРОГРАММИРОВАНИЯ ИЗ СЫРОГО HTML ДО ОБРАБОТКИ go-readability
+	languages := extractCodeLanguagesInOrder(string(bodyBytes))
+
 	// Извлекаем контент с помощью go-readability
 	article, err := readability.FromReader(strings.NewReader(string(bodyBytes)), parsedURL)
 	if err != nil {
@@ -79,8 +82,8 @@ func extractContent(pageURL string) (*Content, error) {
 		content.Title = extractTitle(doc)
 	}
 
-	// Извлекаем основной текст и конвертируем в markdown
-	content.Markdown = extractAndConvertToMarkdown(article)
+	// Извлекаем основной текст и конвертируем в markdown с сохраненными языками
+	content.Markdown = extractAndConvertToMarkdownWithLanguages(article, languages)
 
 	// Извлекаем автора
 	if article.Byline != "" {
@@ -262,6 +265,18 @@ func extractAndConvertToMarkdown(article readability.Article) string {
 		return ""
 	}
 
+	// Извлекаем языки программирования в порядке их появления
+	languages := extractCodeLanguagesInOrder(article.Content)
+
+	return extractAndConvertToMarkdownWithLanguages(article, languages)
+}
+
+// extractAndConvertToMarkdownWithLanguages извлекает контент и конвертирует его в markdown с предварительно извлеченными языками
+func extractAndConvertToMarkdownWithLanguages(article readability.Article, languages []string) string {
+	if article.Content == "" {
+		return ""
+	}
+
 	// Создаем конвертер html-to-markdown с настройками
 	converter := md.NewConverter("", true, nil)
 
@@ -282,8 +297,8 @@ func extractAndConvertToMarkdown(article readability.Article) string {
 		return cleanText(article.TextContent)
 	}
 
-	// Обрабатываем блоки кода после конвертации
-	markdown = processCodeBlocksInMarkdown(markdown, article.Content)
+	// Применяем языки программирования к блокам кода в markdown по порядку
+	markdown = applyLanguagesToMarkdownInOrder(markdown, languages)
 
 	// Очищаем результат
 	markdown = strings.TrimSpace(markdown)
@@ -315,72 +330,138 @@ func extractAndConvertToMarkdown(article readability.Article) string {
 	return result
 }
 
-// processCodeBlocksInMarkdown обрабатывает блоки кода в markdown, исправляя языки программирования
-func processCodeBlocksInMarkdown(markdown, originalHTML string) string {
-	// Парсим оригинальный HTML для извлечения информации о языках
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(originalHTML))
+// extractCodeLanguagesInOrder извлекает языки программирования из HTML в порядке их появления
+func extractCodeLanguagesInOrder(htmlContent string) []string {
+	var languages []string
+
+	// Парсим HTML
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
 	if err != nil {
-		return markdown
+		return languages
 	}
 
-	// Находим все pre блоки и их языки
-	var codeBlocks []struct {
-		content string
-		lang    string
-	}
-
+	// Обрабатываем все pre блоки
 	doc.Find("pre").Each(func(i int, s *goquery.Selection) {
-		code := s.Find("code").Text()
-		if code == "" {
-			code = s.Text()
+		codeElement := s.Find("code")
+		if codeElement.Length() == 0 {
+			return
 		}
 
-		// Определяем язык программирования
-		lang := extractLanguageFromCode(s.Find("code"))
-
-		codeBlocks = append(codeBlocks, struct {
-			content string
-			lang    string
-		}{content: code, lang: lang})
+		// Извлекаем язык программирования
+		language := extractLanguageFromCode(codeElement)
+		languages = append(languages, language)
 	})
 
-	// Исправляем блоки кода с неправильными языками
-	result := markdown
+	// Обрабатываем также одиночные теги code (не в pre)
+	doc.Find("code").Each(func(i int, s *goquery.Selection) {
+		// Проверяем, что это не внутри pre (чтобы не обрабатывать дважды)
+		if s.Parent().Is("pre") {
+			return
+		}
 
-	// Сначала исправляем блоки с неправильными языками (например, "highlight javascript")
-	// Используем регулярное выражение для поиска блоков кода
-	re := regexp.MustCompile("```([a-zA-Z0-9_-]+)\\s+([a-zA-Z0-9_-]+)\\n")
-	matches := re.FindAllStringSubmatch(result, -1)
+		// Извлекаем язык программирования
+		language := extractLanguageFromCode(s)
+		languages = append(languages, language)
+	})
 
-	for _, match := range matches {
-		if len(match) == 3 {
-			// match[1] - первый язык (например, "highlight")
-			// match[2] - второй язык (например, "javascript")
-			firstLang := match[1]
-			secondLang := match[2]
+	return languages
+}
 
-			// Проверяем, является ли второй язык правильным
-			normalizedLang := normalizeLanguageName(secondLang)
-			if normalizedLang != "" {
-				// Заменяем "highlight javascript" на "javascript"
-				oldBlock := fmt.Sprintf("```%s %s\n", firstLang, secondLang)
-				newBlock := fmt.Sprintf("```%s\n", normalizedLang)
-				result = strings.Replace(result, oldBlock, newBlock, 1)
+// applyLanguagesToMarkdownInOrder применяет языки программирования к блокам кода в markdown по порядку
+func applyLanguagesToMarkdownInOrder(markdown string, languages []string) string {
+	// Регулярное выражение для поиска блоков кода (с языком или без)
+	// Ищем ``` в начале строки, затем содержимое, затем ``` в конце
+	re := regexp.MustCompile(`(?m)^` + "```" + `[^\n]*\n((?:.*\n)*?.*?)\n` + "```" + `\s*$`)
+
+	languageIndex := 0
+
+	return re.ReplaceAllStringFunc(markdown, func(match string) string {
+		// Извлекаем содержимое кода из блока
+		codeMatch := re.FindStringSubmatch(match)
+		if len(codeMatch) < 2 {
+			return match
+		}
+
+		codeContent := codeMatch[1]
+
+		// Применяем язык по порядку, если он есть
+		if languageIndex < len(languages) && languages[languageIndex] != "" {
+			language := languages[languageIndex]
+			languageIndex++
+			return fmt.Sprintf("```%s\n%s\n```", language, codeContent)
+		}
+
+		languageIndex++
+		return match
+	})
+}
+
+// processCodeBlocksInHTML обрабатывает блоки кода в HTML до конвертации в markdown
+func processCodeBlocksInHTML(htmlContent string) string {
+	// Парсим HTML
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return htmlContent
+	}
+
+	// Обрабатываем все pre блоки
+	doc.Find("pre").Each(func(i int, s *goquery.Selection) {
+		codeElement := s.Find("code")
+		if codeElement.Length() == 0 {
+			return
+		}
+
+		// Извлекаем язык программирования
+		language := extractLanguageFromCode(codeElement)
+
+		if language != "" {
+			// Добавляем атрибут data-language к тегу pre для лучшей обработки
+			s.SetAttr("data-language", language)
+
+			// Также добавляем класс language-{lang} к тегу code, если его нет
+			currentClass := codeElement.AttrOr("class", "")
+			if !strings.Contains(currentClass, "language-"+language) {
+				newClass := currentClass
+				if newClass != "" {
+					newClass += " "
+				}
+				newClass += "language-" + language
+				codeElement.SetAttr("class", newClass)
 			}
 		}
-	}
+	})
 
-	// Затем обрабатываем блоки без языка (если они есть)
-	for _, block := range codeBlocks {
-		if block.lang != "" {
-			// Ищем блок кода с этим содержимым без языка
-			standardBlock := fmt.Sprintf("```\n%s\n```", block.content)
-			langBlock := fmt.Sprintf("```%s\n%s\n```", block.lang, block.content)
-			result = strings.Replace(result, standardBlock, langBlock, 1)
+	// Обрабатываем также одиночные теги code (не в pre)
+	doc.Find("code").Each(func(i int, s *goquery.Selection) {
+		// Проверяем, что это не внутри pre (чтобы не обрабатывать дважды)
+		if s.Parent().Is("pre") {
+			return
 		}
+
+		// Извлекаем язык программирования
+		language := extractLanguageFromCode(s)
+
+		if language != "" {
+			// Добавляем класс language-{lang} к тегу code
+			currentClass := s.AttrOr("class", "")
+			if !strings.Contains(currentClass, "language-"+language) {
+				newClass := currentClass
+				if newClass != "" {
+					newClass += " "
+				}
+				newClass += "language-" + language
+				s.SetAttr("class", newClass)
+			}
+		}
+	})
+
+	// Возвращаем обработанный HTML
+	html, err := doc.Html()
+	if err != nil {
+		return htmlContent
 	}
 
-	return result
+	return html
 }
 
 // extractLanguageFromCode извлекает язык программирования из тега code
@@ -489,8 +570,61 @@ func normalizeLanguageName(name string) string {
 		"rust": "rust",
 		"rs":   "rust",
 
+		// Erlang
+		"erlang": "erlang",
+
 		// PHP
 		"php": "php",
+
+		// Haskell
+		"haskell": "haskell",
+		"hs":      "haskell",
+
+		// Scala
+		"scala": "scala",
+
+		// Clojure
+		"clojure": "clojure",
+		"clj":     "clojure",
+
+		// Elixir
+		"elixir": "elixir",
+		"ex":     "elixir",
+
+		// F#
+		"f#":     "fsharp",
+		"fsharp": "fsharp",
+
+		// OCaml
+		"ocaml": "ocaml",
+		"ml":    "ocaml",
+
+		// R
+		"r": "r",
+
+		// Julia
+		"julia": "julia",
+		"jl":    "julia",
+
+		// Lua
+		"lua": "lua",
+
+		// Perl
+		"perl": "perl",
+		"pl":   "perl",
+
+		// Groovy
+		"groovy": "groovy",
+
+		// Dart
+		"dart": "dart",
+
+		// Nim
+		"nim": "nim",
+
+		// Crystal
+		"crystal": "crystal",
+		"cr":      "crystal",
 
 		// Ruby
 		"ruby": "ruby",
@@ -553,9 +687,9 @@ func normalizeLanguageName(name string) string {
 		return normalized
 	}
 
-	// Если не нашли в маппинге, возвращаем как есть (если это похоже на язык)
+	// Если не нашли в маппинге, но это похоже на язык (короткое название без пробелов)
 	if len(name) > 0 && len(name) <= 20 && !strings.Contains(name, " ") {
-		return name
+		return "c" // Fallback на язык C для неизвестных языков
 	}
 
 	return ""

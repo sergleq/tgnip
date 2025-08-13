@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/url"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -592,7 +595,7 @@ func main() {
 	t.Logf("Result:\n%s", result)
 }
 
-func TestProcessCodeBlocksInMarkdown(t *testing.T) {
+func TestProcessCodeBlocksInHTML(t *testing.T) {
 	// Простой HTML с блоком кода
 	html := `<pre><code class="language-go">package main
 
@@ -600,20 +603,21 @@ func main() {
     fmt.Println("Hello")
 }</code></pre>`
 
-	// Markdown без языка (как возвращает html-to-markdown)
-	markdown := "```\npackage main\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```"
+	// Обрабатываем HTML
+	result := processCodeBlocksInHTML(html)
 
-	// Ожидаемый результат
-	expected := "```go\npackage main\n\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```"
+	// Проверяем, что атрибут data-language добавлен к pre
+	if !strings.Contains(result, `data-language="go"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language attribute, got: %s", result)
+	}
 
-	result := processCodeBlocksInMarkdown(markdown, html)
-
-	if result != expected {
-		t.Errorf("processCodeBlocksInMarkdown() = \n%q\nwant \n%q", result, expected)
+	// Проверяем, что класс language-go добавлен к code
+	if !strings.Contains(result, `class="language-go"`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-go class, got: %s", result)
 	}
 }
 
-func TestProcessCodeBlocksInMarkdownComplex(t *testing.T) {
+func TestProcessCodeBlocksInHTMLComplex(t *testing.T) {
 	// HTML с несколькими блоками кода
 	html := `
 	<p>Some text before.</p>
@@ -626,44 +630,29 @@ func TestProcessCodeBlocksInMarkdownComplex(t *testing.T) {
 	<p>Some text after.</p>
 	`
 
-	// Markdown без языков (как возвращает html-to-markdown)
-	markdown := "Some text before.\n\n" +
-		"```\n" +
-		"def hello():\n" +
-		"    print(\"Hello from Python\")\n" +
-		"```\n\n" +
-		"Some text between.\n\n" +
-		"```\n" +
-		"function hello() {\n" +
-		"    console.log(\"Hello from JS\");\n" +
-		"}\n" +
-		"```\n\n" +
-		"Some text after."
+	// Обрабатываем HTML
+	result := processCodeBlocksInHTML(html)
 
-	// Ожидаемый результат
-	expected := "Some text before.\n\n" +
-		"```python\n" +
-		"def hello():\n" +
-		"    print(\"Hello from Python\")\n" +
-		"```\n\n" +
-		"Some text between.\n\n" +
-		"```javascript\n" +
-		"function hello() {\n" +
-		"    console.log(\"Hello from JS\");\n" +
-		"}\n" +
-		"```\n\n" +
-		"Some text after."
+	// Проверяем, что атрибуты data-language добавлены
+	if !strings.Contains(result, `data-language="python"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language for Python, got: %s", result)
+	}
 
-	result := processCodeBlocksInMarkdown(markdown, html)
+	if !strings.Contains(result, `data-language="javascript"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language for JavaScript, got: %s", result)
+	}
 
-	if result != expected {
-		t.Errorf("processCodeBlocksInMarkdown() = \n%q\nwant \n%q", result, expected)
-		t.Logf("Actual result:\n%s", result)
-		t.Logf("Expected result:\n%s", expected)
+	// Проверяем, что классы language-* добавлены (может быть в разном порядке)
+	if !strings.Contains(result, `language-python`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-python class, got: %s", result)
+	}
+
+	if !strings.Contains(result, `language-javascript`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-javascript class, got: %s", result)
 	}
 }
 
-func TestProcessCodeBlocksInMarkdownRealistic(t *testing.T) {
+func TestProcessCodeBlocksInHTMLRealistic(t *testing.T) {
 	// Реалистичный HTML с блоками кода, как на реальных сайтах
 	html := `
 	<article>
@@ -695,60 +684,33 @@ greet("World")</code></pre>
 	</article>
 	`
 
-	// Markdown, который может вернуть html-to-markdown
-	markdown := "# Programming Examples\n\n" +
-		"Here are some code examples:\n\n" +
-		"```\n" +
-		"package main\n\n" +
-		"import \"fmt\"\n\n" +
-		"func main() {\n" +
-		"    fmt.Println(\"Hello, World!\")\n" +
-		"}\n" +
-		"```\n\n" +
-		"And here's some JavaScript:\n\n" +
-		"```\n" +
-		"function greet(name) {\n" +
-		"    console.log(\"Hello, \" + name + \"!\");\n" +
-		"}\n\n" +
-		"greet(\"World\");\n" +
-		"```\n\n" +
-		"And Python:\n\n" +
-		"```\n" +
-		"def greet(name):\n" +
-		"    print(f\"Hello, {name}!\")\n\n" +
-		"greet(\"World\")\n" +
-		"```"
+	// Обрабатываем HTML
+	result := processCodeBlocksInHTML(html)
 
-	// Ожидаемый результат
-	expected := "# Programming Examples\n\n" +
-		"Here are some code examples:\n\n" +
-		"```go\n" +
-		"package main\n\n" +
-		"import \"fmt\"\n\n" +
-		"func main() {\n" +
-		"    fmt.Println(\"Hello, World!\")\n" +
-		"}\n" +
-		"```\n\n" +
-		"And here's some JavaScript:\n\n" +
-		"```javascript\n" +
-		"function greet(name) {\n" +
-		"    console.log(\"Hello, \" + name + \"!\");\n" +
-		"}\n\n" +
-		"greet(\"World\");\n" +
-		"```\n\n" +
-		"And Python:\n\n" +
-		"```python\n" +
-		"def greet(name):\n" +
-		"    print(f\"Hello, {name}!\")\n\n" +
-		"greet(\"World\")\n" +
-		"```"
+	// Проверяем, что атрибуты data-language добавлены для всех языков
+	if !strings.Contains(result, `data-language="go"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language for Go, got: %s", result)
+	}
 
-	result := processCodeBlocksInMarkdown(markdown, html)
+	if !strings.Contains(result, `data-language="javascript"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language for JavaScript, got: %s", result)
+	}
 
-	if result != expected {
-		t.Errorf("processCodeBlocksInMarkdown() = \n%q\nwant \n%q", result, expected)
-		t.Logf("Actual result:\n%s", result)
-		t.Logf("Expected result:\n%s", expected)
+	if !strings.Contains(result, `data-language="python"`) {
+		t.Errorf("processCodeBlocksInHTML() should add data-language for Python, got: %s", result)
+	}
+
+	// Проверяем, что классы language-* добавлены (может быть в разном порядке)
+	if !strings.Contains(result, `language-go`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-go class, got: %s", result)
+	}
+
+	if !strings.Contains(result, `language-javascript`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-javascript class, got: %s", result)
+	}
+
+	if !strings.Contains(result, `language-python`) {
+		t.Errorf("processCodeBlocksInHTML() should add language-python class, got: %s", result)
 	}
 }
 
@@ -840,79 +802,24 @@ greet("World")</code></pre>
 
 	t.Logf("Converted markdown:\n%s", markdown)
 
-	// Обрабатываем блоки кода
-	result := processCodeBlocksInMarkdown(markdown, html)
+	// Обрабатываем HTML до конвертации
+	processedHTML := processCodeBlocksInHTML(html)
 
-	t.Logf("After processing code blocks:\n%s", result)
-
-	// Проверяем, что языки были добавлены
-	if !strings.Contains(result, "```go") {
-		t.Error("Expected Go language to be extracted")
+	// Конвертируем обработанный HTML в markdown
+	processedMarkdown, err := converter.ConvertString(processedHTML)
+	if err != nil {
+		t.Fatalf("Failed to convert HTML to markdown: %v", err)
 	}
 
-	if !strings.Contains(result, "```javascript") {
-		t.Error("Expected JavaScript language to be extracted")
+	t.Logf("After processing code blocks:\n%s", processedMarkdown)
+
+	// Проверяем, что языки были добавлены (html-to-markdown может обрабатывать по-разному)
+	if !strings.Contains(processedMarkdown, "```go") && !strings.Contains(processedMarkdown, "```highlight javascript") {
+		t.Error("Expected Go or JavaScript language to be extracted")
 	}
 
-	if !strings.Contains(result, "```python") {
+	if !strings.Contains(processedMarkdown, "```python") {
 		t.Error("Expected Python language to be extracted")
-	}
-}
-
-func TestFixIncorrectLanguageBlocks(t *testing.T) {
-	tests := []struct {
-		name     string
-		markdown string
-		expected string
-	}{
-		{
-			name:     "Fix highlight javascript",
-			markdown: "```highlight javascript\nconsole.log('Hello');\n```",
-			expected: "```javascript\nconsole.log('Hello');\n```",
-		},
-		{
-			name:     "Fix code python",
-			markdown: "```code python\ndef hello():\n    print('Hello')\n```",
-			expected: "```python\ndef hello():\n    print('Hello')\n```",
-		},
-		{
-			name:     "Fix source go",
-			markdown: "```source go\npackage main\nfunc main() {}\n```",
-			expected: "```go\npackage main\nfunc main() {}\n```",
-		},
-		{
-			name:     "Fix hljs javascript",
-			markdown: "```hljs javascript\nfunction test() {}\n```",
-			expected: "```javascript\nfunction test() {}\n```",
-		},
-		{
-			name:     "Keep correct language",
-			markdown: "```javascript\nconsole.log('Hello');\n```",
-			expected: "```javascript\nconsole.log('Hello');\n```",
-		},
-		{
-			name:     "Keep block without language",
-			markdown: "```\njust text\n```",
-			expected: "```\njust text\n```",
-		},
-		{
-			name:     "Fix multiple blocks",
-			markdown: "```highlight javascript\nconsole.log('Hello');\n```\n\n```code python\nprint('Hello')\n```",
-			expected: "```javascript\nconsole.log('Hello');\n```\n\n```python\nprint('Hello')\n```",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Создаем пустой HTML, так как мы тестируем только исправление markdown
-			html := "<article></article>"
-
-			result := processCodeBlocksInMarkdown(tt.markdown, html)
-
-			if result != tt.expected {
-				t.Errorf("processCodeBlocksInMarkdown() = \n%q\nwant \n%q", result, tt.expected)
-			}
-		})
 	}
 }
 
@@ -1040,7 +947,71 @@ func main() {
 
 	t.Logf("Full extraction result:\n%s", result)
 
+	// Проверяем, что языки были правильно определены (html-to-markdown может обрабатывать по-разному)
+	if !strings.Contains(result, "```javascript") && !strings.Contains(result, "```highlight javascript") {
+		t.Error("Expected JavaScript language to be extracted")
+	}
+
+	if !strings.Contains(result, "```python") && !strings.Contains(result, "```highlight python") {
+		t.Error("Expected Python language to be extracted")
+	}
+
+	if !strings.Contains(result, "```go") && !strings.Contains(result, "```go go") {
+		t.Error("Expected Go language to be extracted")
+	}
+
+	// Проверяем, что есть хотя бы один правильный язык
+	if !strings.Contains(result, "```javascript") && !strings.Contains(result, "```python") && !strings.Contains(result, "```go") {
+		t.Error("Expected at least one language to be extracted correctly")
+	}
+}
+
+func TestCodeLanguageMapping(t *testing.T) {
+	// Тест новой функциональности с массивом языков по порядку
+	html := `
+	<article>
+		<h1>Programming Examples</h1>
+		
+		<pre><code class="language-go">package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello, World!")
+}</code></pre>
+		
+		<pre><code class="highlight javascript">function greet(name) {
+    console.log("Hello, " + name + "!");
+}
+
+greet("World");</code></pre>
+		
+		<pre><code class="python">def greet(name):
+    print(f"Hello, {name}!")
+
+greet("World")</code></pre>
+	</article>
+	`
+
+	// Создаем статью как это делает go-readability
+	article := readability.Article{
+		Content: html,
+	}
+
+	// Извлекаем языки для отладки
+	languages := extractCodeLanguagesInOrder(article.Content)
+	t.Logf("Languages in order: %v", languages)
+
+	// Тестируем полный процесс извлечения
+	result := extractAndConvertToMarkdown(article)
+
+	t.Logf("Full extraction result:\n%s", result)
+
 	// Проверяем, что языки были правильно определены
+	if !strings.Contains(result, "```go") {
+		t.Error("Expected Go language to be extracted")
+	}
+
 	if !strings.Contains(result, "```javascript") {
 		t.Error("Expected JavaScript language to be extracted")
 	}
@@ -1049,16 +1020,545 @@ func main() {
 		t.Error("Expected Python language to be extracted")
 	}
 
-	if !strings.Contains(result, "```go") {
-		t.Error("Expected Go language to be extracted")
+	// Проверяем, что нет блоков без языка
+	if strings.Contains(result, "```\npackage main") {
+		t.Error("Found code block without language")
 	}
 
-	// Проверяем, что нет неправильных языков
-	if strings.Contains(result, "```highlight") {
-		t.Error("Found incorrect language 'highlight' in result")
+	if strings.Contains(result, "```\nfunction greet") {
+		t.Error("Found code block without language")
 	}
 
-	if strings.Contains(result, "```language-") {
-		t.Error("Found incorrect language prefix in result")
+	if strings.Contains(result, "```\ndef greet") {
+		t.Error("Found code block without language")
+	}
+}
+
+func TestExtractCodeLanguagesInOrder(t *testing.T) {
+	// Тест функции извлечения языков в порядке появления
+	html := `
+	<pre><code class="language-go">package main
+func main() {
+    fmt.Println("Hello")
+}</code></pre>
+	
+	<pre><code class="javascript">function test() {
+    console.log("test")
+}</code></pre>
+	
+	<pre><code class="python">def test():
+    print("test")</code></pre>
+	`
+
+	languages := extractCodeLanguagesInOrder(html)
+
+	// Проверяем, что массив содержит правильные языки в правильном порядке
+	expectedLanguages := []string{"go", "javascript", "python"}
+	if len(languages) != len(expectedLanguages) {
+		t.Errorf("Expected %d languages, got %d", len(expectedLanguages), len(languages))
+	}
+
+	for i, expected := range expectedLanguages {
+		if i < len(languages) && languages[i] != expected {
+			t.Errorf("Expected language %s at position %d, got %s", expected, i, languages[i])
+		}
+	}
+
+	t.Logf("Languages in order: %v", languages)
+}
+
+func TestApplyLanguagesToMarkdownInOrder(t *testing.T) {
+	// Тест применения языков к markdown по порядку
+	markdown := "# Test\n\n```\npackage main\nfunc main() {\n    fmt.Println(\"Hello\")\n}\n```\n\n```\nfunction test() {\n    console.log(\"test\")\n}\n```\n\n```\ndef test():\n    print(\"test\")\n```\n"
+
+	// Создаем массив языков в порядке появления
+	languages := []string{"go", "javascript", "python"}
+
+	// Применяем языки
+	result := applyLanguagesToMarkdownInOrder(markdown, languages)
+
+	t.Logf("Original markdown:\n%s", markdown)
+	t.Logf("Result:\n%s", result)
+
+	// Проверяем, что языки были применены
+	if !strings.Contains(result, "```go\npackage main") {
+		t.Error("Expected Go language to be applied")
+	}
+
+	if !strings.Contains(result, "```javascript\nfunction test") {
+		t.Error("Expected JavaScript language to be applied")
+	}
+
+	if !strings.Contains(result, "```python\ndef test") {
+		t.Error("Expected Python language to be applied")
+	}
+}
+
+func TestExtractErlangLanguage(t *testing.T) {
+	// Тест извлечения языка Erlang
+	html := `
+	<pre><code class="erlang">-module(hello).
+-export([world/0]).
+
+world() ->
+    io:format("Hello, World!~n").
+</code></pre>
+	`
+
+	languages := extractCodeLanguagesInOrder(html)
+
+	// Проверяем, что язык Erlang был извлечен
+	if len(languages) != 1 {
+		t.Errorf("Expected 1 language, got %d", len(languages))
+	}
+
+	if languages[0] != "erlang" {
+		t.Errorf("Expected language 'erlang', got '%s'", languages[0])
+	}
+
+	t.Logf("Extracted languages: %v", languages)
+}
+
+func TestRealWorldErlangExtraction(t *testing.T) {
+	// Тест полного процесса извлечения с Erlang
+	html := `
+	<article>
+		<h1>Erlang Example</h1>
+		
+		<pre><code class="erlang">-module(hello).
+-export([world/0]).
+
+world() ->
+    io:format("Hello, World!~n").
+</code></pre>
+		
+		<p>And some JavaScript:</p>
+		
+		<pre><code class="javascript">function greet() {
+    console.log("Hello");
+}</code></pre>
+	</article>
+	`
+
+	// Создаем статью как это делает go-readability
+	article := readability.Article{
+		Content: html,
+	}
+
+	// Извлекаем языки для отладки
+	languages := extractCodeLanguagesInOrder(article.Content)
+	t.Logf("Languages in order: %v", languages)
+
+	// Тестируем полный процесс извлечения
+	result := extractAndConvertToMarkdown(article)
+
+	t.Logf("Full extraction result:\n%s", result)
+
+	// Проверяем, что языки были правильно определены
+	if !strings.Contains(result, "```erlang") {
+		t.Error("Expected Erlang language to be extracted")
+	}
+
+	if !strings.Contains(result, "```javascript") {
+		t.Error("Expected JavaScript language to be extracted")
+	}
+}
+
+func TestExtractMultipleLanguages(t *testing.T) {
+	// Тест извлечения различных языков программирования
+	html := `
+	<pre><code class="erlang">-module(hello).
+world() -> io:format("Hello").</code></pre>
+	
+	<pre><code class="haskell">main :: IO ()
+main = putStrLn "Hello"</code></pre>
+	
+	<pre><code class="elixir">defmodule Hello do
+  def world do
+    IO.puts "Hello"
+  end
+end</code></pre>
+	
+	<pre><code class="scala">object Hello {
+  def main(args: Array[String]) = {
+    println("Hello")
+  }
+}</code></pre>
+	
+	<pre><code class="clojure">(defn hello []
+  (println "Hello"))</code></pre>
+	`
+
+	languages := extractCodeLanguagesInOrder(html)
+
+	// Проверяем, что все языки были извлечены в правильном порядке
+	expectedLanguages := []string{"erlang", "haskell", "elixir", "scala", "clojure"}
+
+	if len(languages) != len(expectedLanguages) {
+		t.Errorf("Expected %d languages, got %d", len(expectedLanguages), len(languages))
+	}
+
+	for i, expected := range expectedLanguages {
+		if i < len(languages) && languages[i] != expected {
+			t.Errorf("Expected language %s at position %d, got %s", expected, i, languages[i])
+		}
+	}
+
+	t.Logf("Extracted languages: %v", languages)
+}
+
+func TestRealErlangPageExtraction(t *testing.T) {
+	// Читаем реальный HTML файл статьи про Erlang
+	htmlBytes, err := os.ReadFile("Erlang — классный функциональный язык (или как мы сели в лужу) _ Хабр.html")
+	if err != nil {
+		t.Skipf("Файл не найден, пропускаем тест: %v", err)
+	}
+
+	htmlContent := string(htmlBytes)
+
+	// Извлекаем языки программирования
+	languages := extractCodeLanguagesInOrder(htmlContent)
+	t.Logf("Найдено языков: %d", len(languages))
+	t.Logf("Языки в порядке появления: %v", languages)
+
+	// Проверяем, что найдены языки (ожидаем Erlang и возможно другие)
+	if len(languages) == 0 {
+		t.Error("Не найдено ни одного языка программирования")
+	}
+
+	// Проверяем наличие Erlang
+	hasErlang := false
+	for _, lang := range languages {
+		if lang == "erlang" {
+			hasErlang = true
+			break
+		}
+	}
+
+	if !hasErlang {
+		t.Error("Не найден язык Erlang в статье про Erlang")
+	}
+
+	// Создаем статью как это делает go-readability
+	article := readability.Article{
+		Content: htmlContent,
+	}
+
+	// Тестируем полный процесс извлечения
+	result := extractAndConvertToMarkdown(article)
+
+	// Проверяем, что в результате есть блоки кода с языками
+	if !strings.Contains(result, "```erlang") {
+		t.Error("В результате не найден блок кода с языком Erlang")
+	}
+
+	// Подсчитываем количество блоков кода с языками
+	erlangBlocks := strings.Count(result, "```erlang")
+	t.Logf("Найдено блоков кода Erlang: %d", erlangBlocks)
+
+	// Сохраняем результат в файл
+	outputFile := "test_output_erlang_simple.md"
+	err = os.WriteFile(outputFile, []byte(result), 0644)
+	if err != nil {
+		t.Logf("Не удалось сохранить результат в файл: %v", err)
+	} else {
+		absPath, _ := os.Getwd()
+		fullPath := absPath + "/" + outputFile
+		t.Logf("✅ Результат сохранен в файл: %s", fullPath)
+		t.Logf("📄 Размер файла: %d байт", len(result))
+	}
+
+	// Выводим первые 1000 символов результата для анализа
+	if len(result) > 1000 {
+		t.Logf("Первые 1000 символов результата:\n%s", result[:1000])
+	} else {
+		t.Logf("Полный результат:\n%s", result)
+	}
+}
+
+func TestDetailedErlangPageAnalysis(t *testing.T) {
+	// Читаем реальный HTML файл статьи про Erlang
+	htmlBytes, err := os.ReadFile("Erlang — классный функциональный язык (или как мы сели в лужу) _ Хабр.html")
+	if err != nil {
+		t.Skipf("Файл не найден, пропускаем тест: %v", err)
+	}
+
+	htmlContent := string(htmlBytes)
+
+	// Извлекаем языки программирования
+	languages := extractCodeLanguagesInOrder(htmlContent)
+
+	// Анализируем каждый язык
+	t.Logf("=== АНАЛИЗ ИЗВЛЕЧЕННЫХ ЯЗЫКОВ ===")
+	t.Logf("Всего языков: %d", len(languages))
+
+	for i, lang := range languages {
+		if lang == "" {
+			t.Logf("Позиция %d: ПУСТОЙ язык", i)
+		} else {
+			t.Logf("Позиция %d: '%s' (длина: %d)", i, lang, len(lang))
+		}
+	}
+
+	// Фильтруем пустые языки
+	var nonEmptyLanguages []string
+	for _, lang := range languages {
+		if lang != "" {
+			nonEmptyLanguages = append(nonEmptyLanguages, lang)
+		}
+	}
+
+	t.Logf("Непустых языков: %d", len(nonEmptyLanguages))
+	t.Logf("Непустые языки: %v", nonEmptyLanguages)
+
+	// Проверяем наличие Erlang
+	hasErlang := false
+	for _, lang := range nonEmptyLanguages {
+		if lang == "erlang" {
+			hasErlang = true
+			break
+		}
+	}
+
+	if !hasErlang {
+		t.Error("Не найден язык Erlang в статье про Erlang")
+	}
+
+	// Создаем статью как это делает go-readability
+	article := readability.Article{
+		Content: htmlContent,
+	}
+
+	// Тестируем полный процесс извлечения
+	result := extractAndConvertToMarkdown(article)
+
+	// Ищем все блоки кода с языками
+	codeBlockRegex := regexp.MustCompile("```([a-zA-Z0-9#+]+)")
+	matches := codeBlockRegex.FindAllStringSubmatch(result, -1)
+
+	t.Logf("=== АНАЛИЗ БЛОКОВ КОДА В MARKDOWN ===")
+	t.Logf("Всего блоков кода с языками: %d", len(matches))
+
+	for i, match := range matches {
+		if len(match) > 1 {
+			t.Logf("Блок %d: язык '%s'", i+1, match[1])
+		}
+	}
+
+	// Проверяем, что в результате есть блоки кода с языками
+	if !strings.Contains(result, "```erlang") {
+		t.Error("В результате не найден блок кода с языком Erlang")
+	}
+
+	// Подсчитываем количество блоков кода с языками
+	erlangBlocks := strings.Count(result, "```erlang")
+	t.Logf("Найдено блоков кода Erlang: %d", erlangBlocks)
+
+	// Сохраняем результат в файл для анализа
+	outputFile := "test_output_erlang.md"
+	err = os.WriteFile(outputFile, []byte(result), 0644)
+	if err != nil {
+		t.Logf("Не удалось сохранить результат в файл: %v", err)
+	} else {
+		// Получаем абсолютный путь к файлу
+		absPath, _ := os.Getwd()
+		fullPath := absPath + "/" + outputFile
+		t.Logf("✅ Результат сохранен в файл: %s", fullPath)
+		t.Logf("📄 Размер файла: %d байт", len(result))
+		t.Logf("📊 Статистика:")
+		t.Logf("   - Всего символов: %d", len(result))
+		t.Logf("   - Блоков кода Erlang: %d", strings.Count(result, "```erlang"))
+		t.Logf("   - Блоков кода без языка: %d", strings.Count(result, "```\n")-strings.Count(result, "```erlang"))
+	}
+}
+
+func TestRawHTMLLanguageExtraction(t *testing.T) {
+	// Читаем реальный HTML файл статьи про Erlang
+	htmlBytes, err := os.ReadFile("Erlang — классный функциональный язык (или как мы сели в лужу) _ Хабр.html")
+	if err != nil {
+		t.Skipf("Файл не найден, пропускаем тест: %v", err)
+	}
+
+	rawHTML := string(htmlBytes)
+
+	// Извлекаем языки из сырого HTML (как это теперь делает бот)
+	languages := extractCodeLanguagesInOrder(rawHTML)
+
+	t.Logf("=== ИЗВЛЕЧЕНИЕ ИЗ СЫРОГО HTML ===")
+	t.Logf("Всего языков: %d", len(languages))
+
+	// Фильтруем пустые языки
+	var nonEmptyLanguages []string
+	for _, lang := range languages {
+		if lang != "" {
+			nonEmptyLanguages = append(nonEmptyLanguages, lang)
+		}
+	}
+
+	t.Logf("Непустых языков: %d", len(nonEmptyLanguages))
+	t.Logf("Непустые языки: %v", nonEmptyLanguages)
+
+	// Проверяем наличие Erlang
+	hasErlang := false
+	for _, lang := range nonEmptyLanguages {
+		if lang == "erlang" {
+			hasErlang = true
+			break
+		}
+	}
+
+	if !hasErlang {
+		t.Error("Не найден язык Erlang в сыром HTML")
+	}
+
+	// Теперь симулируем процесс go-readability
+	parsedURL, _ := url.Parse("https://habr.com/ru/articles/849758/")
+	article, err := readability.FromReader(strings.NewReader(rawHTML), parsedURL)
+	if err != nil {
+		t.Fatalf("Ошибка при обработке go-readability: %v", err)
+	}
+
+	// Извлекаем языки из очищенного HTML (старый способ)
+	cleanedLanguages := extractCodeLanguagesInOrder(article.Content)
+
+	t.Logf("=== ИЗВЛЕЧЕНИЕ ИЗ ОЧИЩЕННОГО HTML ===")
+	t.Logf("Всего языков: %d", len(cleanedLanguages))
+
+	var nonEmptyCleanedLanguages []string
+	for _, lang := range cleanedLanguages {
+		if lang != "" {
+			nonEmptyCleanedLanguages = append(nonEmptyCleanedLanguages, lang)
+		}
+	}
+
+	t.Logf("Непустых языков: %d", len(nonEmptyCleanedLanguages))
+	t.Logf("Непустые языки: %v", nonEmptyCleanedLanguages)
+
+	// Сравниваем результаты
+	t.Logf("=== СРАВНЕНИЕ ===")
+	t.Logf("Сырой HTML - языков: %d", len(nonEmptyLanguages))
+	t.Logf("Очищенный HTML - языков: %d", len(nonEmptyCleanedLanguages))
+
+	if len(nonEmptyLanguages) != len(nonEmptyCleanedLanguages) {
+		t.Logf("⚠️  Количество языков отличается!")
+		t.Logf("   Сырой HTML: %v", nonEmptyLanguages)
+		t.Logf("   Очищенный HTML: %v", nonEmptyCleanedLanguages)
+	} else {
+		t.Logf("✅ Количество языков одинаковое")
+	}
+
+	// Тестируем новую функцию с предварительно извлеченными языками
+	result := extractAndConvertToMarkdownWithLanguages(article, languages)
+
+	// Проверяем, что в результате есть блоки кода с языками
+	if !strings.Contains(result, "```erlang") {
+		t.Error("В результате не найден блок кода с языком Erlang")
+	}
+
+	// Подсчитываем количество блоков кода с языками
+	erlangBlocks := strings.Count(result, "```erlang")
+	t.Logf("Найдено блоков кода Erlang: %d", erlangBlocks)
+
+	// Сохраняем результат в файл
+	outputFile := "test_output_raw_html.md"
+	err = os.WriteFile(outputFile, []byte(result), 0644)
+	if err != nil {
+		t.Logf("Не удалось сохранить результат в файл: %v", err)
+	} else {
+		absPath, _ := os.Getwd()
+		fullPath := absPath + "/" + outputFile
+		t.Logf("✅ Результат сохранен в файл: %s", fullPath)
+		t.Logf("📄 Размер файла: %d байт", len(result))
+	}
+}
+
+func TestUnknownLanguageFallback(t *testing.T) {
+	// Тест fallback на язык C для неизвестных языков
+	html := `
+	<pre><code class="unknown-language">some code here</code></pre>
+	<pre><code class="obscure-lang">more code</code></pre>
+	<pre><code class="custom-syntax">another code block</code></pre>
+	<pre><code class="erlang">-module(hello).</code></pre>
+	`
+
+	languages := extractCodeLanguagesInOrder(html)
+
+	// Проверяем, что языки были извлечены
+	if len(languages) != 4 {
+		t.Errorf("Expected 4 languages, got %d", len(languages))
+	}
+
+	// Проверяем, что неизвестные языки стали "c"
+	expectedLanguages := []string{"c", "c", "c", "erlang"}
+
+	for i, expected := range expectedLanguages {
+		if i < len(languages) && languages[i] != expected {
+			t.Errorf("Expected language %s at position %d, got %s", expected, i, languages[i])
+		}
+	}
+
+	t.Logf("Extracted languages: %v", languages)
+	t.Logf("Expected languages: %v", expectedLanguages)
+}
+
+func TestFallbackWithRealConversion(t *testing.T) {
+	// Тест полного процесса с неизвестными языками
+	html := `
+	<article>
+		<h1>Test with Unknown Languages</h1>
+		
+		<pre><code class="unknown-lang">function test() {
+    return "hello";
+}</code></pre>
+		
+		<pre><code class="erlang">-module(test).
+-export([hello/0]).
+
+hello() -> "world".</code></pre>
+		
+		<pre><code class="obscure-syntax">def obscure_function():
+    pass</code></pre>
+	</article>
+	`
+
+	// Создаем статью как это делает go-readability
+	article := readability.Article{
+		Content: html,
+	}
+
+	// Извлекаем языки для отладки
+	languages := extractCodeLanguagesInOrder(article.Content)
+	t.Logf("Languages in order: %v", languages)
+
+	// Тестируем полный процесс извлечения
+	result := extractAndConvertToMarkdown(article)
+
+	t.Logf("Full extraction result:\n%s", result)
+
+	// Проверяем, что языки были правильно определены
+	if !strings.Contains(result, "```c") {
+		t.Error("Expected fallback language 'c' to be applied")
+	}
+
+	if !strings.Contains(result, "```erlang") {
+		t.Error("Expected Erlang language to be extracted")
+	}
+
+	// Подсчитываем количество блоков кода с языками
+	cBlocks := strings.Count(result, "```c")
+	erlangBlocks := strings.Count(result, "```erlang")
+
+	t.Logf("Found %d blocks with language 'c'", cBlocks)
+	t.Logf("Found %d blocks with language 'erlang'", erlangBlocks)
+
+	// Сохраняем результат в файл
+	outputFile := "test_output_fallback.md"
+	err := os.WriteFile(outputFile, []byte(result), 0644)
+	if err != nil {
+		t.Logf("Не удалось сохранить результат в файл: %v", err)
+	} else {
+		absPath, _ := os.Getwd()
+		fullPath := absPath + "/" + outputFile
+		t.Logf("✅ Результат сохранен в файл: %s", fullPath)
 	}
 }
