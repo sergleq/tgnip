@@ -34,8 +34,9 @@ func convertToMarkdown(content *Content, originalURL string, locale Locale) stri
 	// Основной текст
 	markdown.WriteString(fmt.Sprintf("%s\n\n", locale.ContentSection))
 
-	// Добавляем основной контент
-	markdown.WriteString(content.Markdown)
+	// Обрабатываем контент с детекцией языка для блоков кода
+	processedContent := processMarkdownWithLanguageDetection(content.Markdown)
+	markdown.WriteString(processedContent)
 	markdown.WriteString("\n\n")
 
 	// Футер
@@ -236,4 +237,72 @@ func cleanTitleForFilename(title string) string {
 	title = strings.Trim(title, "_")
 
 	return title
+}
+
+// processMarkdownWithLanguageDetection обрабатывает Markdown и добавляет языки к блокам кода
+func processMarkdownWithLanguageDetection(markdown string) string {
+	// Создаем детектор языка
+	detector := NewLanguageDetector()
+
+	// Находим все блоки кода
+	codeBlockRegex := regexp.MustCompile(`(?s)` + "```" + `(\w*)\s*\n(.*?)\n` + "```" + ``)
+	matches := codeBlockRegex.FindAllStringSubmatch(markdown, -1)
+
+	// Если блоков кода нет, возвращаем исходный текст
+	if len(matches) == 0 {
+		return markdown
+	}
+
+	// Обрабатываем каждый блок кода
+	result := markdown
+	for _, match := range matches {
+		if len(match) >= 3 {
+			originalBlock := match[0]
+			language := match[1]
+			content := match[2]
+
+			// Если язык уже указан, пропускаем
+			if language != "" {
+				continue
+			}
+
+			// Создаем блок кода для анализа
+			block := CodeBlock{
+				Content:     content,
+				Language:    "",
+				Context:     getContextAroundBlock(markdown, originalBlock),
+				LineNumber:  0,
+				HasExplicit: false,
+			}
+
+			// Определяем язык
+			score := detector.DetectLanguage(block)
+
+			// Если уверенность достаточно высокая, добавляем язык
+			if score.Confidence > 0.3 && score.Language != "" {
+				// Создаем новый блок с языком
+				newBlock := "```" + score.Language + "\n" + content + "\n```"
+
+				// Заменяем в результате
+				result = strings.Replace(result, originalBlock, newBlock, 1)
+			}
+		}
+	}
+
+	return result
+}
+
+// getContextAroundBlock получает контекст вокруг блока кода
+func getContextAroundBlock(markdown, block string) string {
+	// Находим позицию блока в тексте
+	pos := strings.Index(markdown, block)
+	if pos == -1 {
+		return ""
+	}
+
+	// Определяем окно контекста (500 символов до и после)
+	start := max(0, pos-500)
+	end := min(len(markdown), pos+len(block)+500)
+
+	return markdown[start:end]
 }
