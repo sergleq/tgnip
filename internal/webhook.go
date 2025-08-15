@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -23,8 +22,13 @@ type WebhookServer struct {
 
 // NewWebhookServer создает новый webhook сервер
 func NewWebhookServer(bot *tgbotapi.BotAPI, config *Config) *WebhookServer {
-	// Генерируем секретный токен для webhook
-	secretToken := generateSecretToken()
+	// Получаем секретный токен из переменной окружения
+	secretToken := os.Getenv("WEBHOOK_SECRET_TOKEN")
+	if secretToken == "" {
+		logger.Fatal("WEBHOOK_SECRET_TOKEN не установлен. Установите секретный токен в переменной окружения")
+	}
+
+	logger.Info("Используем WEBHOOK_SECRET_TOKEN из переменной окружения")
 
 	return &WebhookServer{
 		bot:         bot,
@@ -38,7 +42,7 @@ func (ws *WebhookServer) Start() error {
 	// Получаем настройки из переменных окружения
 	port := os.Getenv("WEBHOOK_PORT")
 	if port == "" {
-		port = "8443"
+		port = "8080"
 	}
 
 	webhookURL := os.Getenv("WEBHOOK_URL")
@@ -50,12 +54,12 @@ func (ws *WebhookServer) Start() error {
 
 	// Настраиваем маршруты
 	mux := http.NewServeMux()
-	mux.HandleFunc("/webhook", ws.handleWebhook)
-	mux.HandleFunc("/health", ws.handleHealth)
+	mux.HandleFunc("/telegram/webhook", ws.handleWebhook)
+	mux.HandleFunc("/healthz", ws.handleHealth)
 
 	// Создаем сервер
 	ws.server = &http.Server{
-		Addr:    ":" + port,
+		Addr:    "0.0.0.0:" + port,
 		Handler: mux,
 	}
 
@@ -65,12 +69,12 @@ func (ws *WebhookServer) Start() error {
 
 	if certFile != "" && keyFile != "" {
 		// HTTPS режим
-		logger.Infof("Запуск HTTPS webhook сервера на порту %s", port)
+		logger.Infof("Запуск HTTPS webhook сервера на 0.0.0.0:%s", port)
 		return ws.startHTTPS(certFile, keyFile)
 	} else {
 		// HTTP режим (только для разработки)
 		logger.Warn("SSL сертификаты не найдены, запуск в HTTP режиме (только для разработки)")
-		logger.Infof("Запуск HTTP webhook сервера на порту %s", port)
+		logger.Infof("Запуск HTTP webhook сервера на 0.0.0.0:%s", port)
 		return ws.startHTTP()
 	}
 }
@@ -106,7 +110,7 @@ func (ws *WebhookServer) startHTTPS(certFile, keyFile string) error {
 func (ws *WebhookServer) startHTTP() error {
 	// Для разработки можно использовать ngrok или аналогичные сервисы
 	// которые предоставляют HTTPS туннель к локальному HTTP серверу
-	logger.Info("Для разработки используйте ngrok: ngrok http 8443")
+	logger.Info("Для разработки используйте ngrok: ngrok http 8080")
 	logger.Info("Затем установите WEBHOOK_URL=https://your-ngrok-url.ngrok.io")
 
 	// Запускаем сервер в горутине
@@ -116,15 +120,17 @@ func (ws *WebhookServer) startHTTP() error {
 		}
 	}()
 
-	logger.Info("HTTP сервер запущен на порту 8443 (ожидание HTTPS туннеля)")
+	logger.Info("HTTP сервер запущен на 0.0.0.0:8080 (ожидание HTTPS туннеля)")
 	return nil
 }
 
 // Stop останавливает webhook сервер
 func (ws *WebhookServer) Stop() error {
-	// Удаляем webhook
-	if err := ws.deleteWebhook(); err != nil {
-		logger.Errorf("Ошибка удаления webhook: %v", err)
+	// Удаляем webhook только если бот доступен
+	if ws.bot != nil {
+		if err := ws.deleteWebhook(); err != nil {
+			logger.Errorf("Ошибка удаления webhook: %v", err)
+		}
 	}
 
 	// Останавливаем сервер
@@ -136,13 +142,17 @@ func (ws *WebhookServer) Stop() error {
 
 // setWebhook устанавливает webhook в Telegram
 func (ws *WebhookServer) SetWebhook() error {
-	webhookURL := ws.webhookURL + "/webhook"
+	webhookURL := ws.webhookURL + "/telegram/webhook"
 
 	// Создаем webhook конфигурацию
 	webhook, err := tgbotapi.NewWebhook(webhookURL)
 	if err != nil {
 		return fmt.Errorf("ошибка создания webhook: %w", err)
 	}
+
+	// Примечание: секретный токен проверяется на стороне сервера
+	// при получении webhook запросов, но не передается в Telegram API
+	logger.Info("Секретный токен настроен для проверки входящих запросов")
 
 	// Устанавливаем webhook через API
 	_, err = ws.bot.Request(webhook)
@@ -225,15 +235,8 @@ func (ws *WebhookServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"status":  "healthy",
-		"webhook": ws.webhookURL + "/webhook",
+		"webhook": ws.webhookURL + "/telegram/webhook",
 	}
 
 	json.NewEncoder(w).Encode(response)
-}
-
-// generateSecretToken генерирует секретный токен для webhook
-func generateSecretToken() string {
-	// В продакшене лучше использовать криптографически безопасный генератор
-	// Для простоты используем хеш от времени
-	return fmt.Sprintf("secret_%d", time.Now().Unix())
 }

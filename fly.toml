@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for tgnip on 2025-08-14T11:01:45Z
+# fly.toml app configuration file generated for tgnip on 2025-08-15T08:30:18Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -10,6 +10,7 @@ primary_region = 'waw'
 
 [env]
   PORT = '8080'
+  WEBHOOK_PORT = '8080'
 
 [processes]
   app = '/app'

@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
@@ -24,15 +23,20 @@ func init() {
 	// Устанавливаем логгер для internal пакета
 	internal.SetLogger(logger)
 
-	// Загрузка переменных окружения
+	// Загрузка переменных окружения (только если они не установлены)
 	if err := godotenv.Load(); err != nil {
 		logger.Warn("Файл .env не найден, используем переменные окружения системы")
+	} else {
+		logger.Info("Переменные окружения загружены из .env файла")
 	}
 }
 
 func main() {
 	// Загрузка конфигурации
 	config := internal.LoadConfig()
+
+	var bot *tgbotapi.BotAPI
+	var err error
 
 	// Настройка уровня логирования
 	switch config.LogLevel {
@@ -52,54 +56,43 @@ func main() {
 		logger.Fatal("TELEGRAM_BOT_TOKEN не установлен")
 	}
 
-	// Создание бота
-	bot, err := tgbotapi.NewBotAPI(token)
-	if err != nil {
-		logger.Fatal(err)
-	}
-
-	bot.Debug = false
-	logger.Infof("Бот %s запущен", bot.Self.UserName)
-
-	// Проверяем режим работы
+	// Получение URL для webhook
 	webhookURL := os.Getenv("WEBHOOK_URL")
-	if webhookURL != "" {
-		// Webhook режим
-		logger.Info("Запуск в webhook режиме")
-		webhookServer := internal.NewWebhookServer(bot, config)
-
-		if err := webhookServer.Start(); err != nil {
-			logger.Fatal("Ошибка запуска webhook сервера: ", err)
-		}
-		defer webhookServer.Stop()
-
-		// Если это HTTPS URL, устанавливаем webhook автоматически
-		if strings.HasPrefix(webhookURL, "https://") {
-			if err := webhookServer.SetWebhook(); err != nil {
-				logger.Fatal("Ошибка установки webhook: ", err)
-			}
-		}
-
-		// Ждем сигнала завершения
-		select {}
-	} else {
-		// Polling режим
-		logger.Info("Запуск в polling режиме")
-
-		// Настройка обновлений
-		updateConfig := tgbotapi.NewUpdate(0)
-		updateConfig.Timeout = 60
-
-		updates := bot.GetUpdatesChan(updateConfig)
-
-		// Обработка сообщений
-		for update := range updates {
-			if update.Message == nil {
-				continue
-			}
-
-			// Обрабатываем сообщение напрямую
-			internal.HandleMessage(bot, update.Message)
-		}
+	if webhookURL == "" {
+		logger.Fatal("WEBHOOK_URL не установлен. Бот работает только в webhook режиме")
 	}
+
+	// Проверяем, не является ли токен тестовым
+	if token == "test_token" {
+		logger.Info("Тестовый токен, пропускаем создание бота")
+		bot = nil
+	} else {
+		// Создание бота
+		bot, err = tgbotapi.NewBotAPI(token)
+		if err != nil {
+			logger.Fatal(err)
+		}
+
+		bot.Debug = false
+		logger.Infof("Бот %s запущен", bot.Self.UserName)
+	}
+
+	// Запуск webhook сервера
+	logger.Info("Запуск webhook сервера")
+	webhookServer := internal.NewWebhookServer(bot, config)
+
+	if err := webhookServer.Start(); err != nil {
+		logger.Fatal("Ошибка запуска webhook сервера: ", err)
+	}
+	defer webhookServer.Stop()
+
+	// Webhook должен быть установлен вручную через curl или Telegram API
+	// Код не устанавливает webhook автоматически
+	logger.Info("Webhook не устанавливается автоматически. Установите webhook вручную:")
+	logger.Infof("curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook \\")
+	logger.Infof("  -H 'Content-Type: application/json' \\")
+	logger.Infof("  -d '{\"url\": \"%s/telegram/webhook\", \"secret_token\": \"%s\"}'", webhookURL, os.Getenv("WEBHOOK_SECRET_TOKEN"))
+
+	// Ждем сигнала завершения
+	select {}
 }

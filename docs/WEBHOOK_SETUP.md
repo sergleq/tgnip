@@ -1,156 +1,110 @@
-# Настройка Webhook для Telegram бота
+# Настройка Webhook Сервера
 
-## Обзор
+## Описание
 
-Этот проект настроен для работы с Telegram Bot API через webhook на порту 8080. Сервер предоставляет следующие эндпоинты:
-
-- `/healthz` - проверка состояния сервера
-- `/webhook` - эндпоинт для получения обновлений от Telegram
+Бот работает только в webhook режиме с HTTP-сервером, который слушает на `0.0.0.0:8080` и обрабатывает запросы на эндпойнте `/telegram/webhook`.
 
 ## Конфигурация
 
 ### Переменные окружения
 
-Создайте файл `.env` со следующими переменными:
+- `TELEGRAM_BOT_TOKEN` - токен вашего Telegram бота (обязательно)
+- `WEBHOOK_URL` - URL для webhook (обязательно)
+- `WEBHOOK_PORT` - порт для webhook сервера (по умолчанию: 8080)
+- `WEBHOOK_SECRET_TOKEN` - секретный токен для проверки webhook запросов (опционально)
+- `SSL_CERT_FILE` - путь к SSL сертификату (для HTTPS)
+- `SSL_KEY_FILE` - путь к SSL ключу (для HTTPS)
 
-```env
-# Обязательные
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-WEBHOOK_URL=https://your-domain.com
+### Режим работы
 
-# Опциональные
-PORT=8080
-LOG_LEVEL=info
-HTTP_TIMEOUT=30
-MAX_RETRIES=3
-```
-
-### Настройка Fly.io
-
-Файл `fly.toml` уже настроен для:
-- Публикации порта 8080
-- Health check на `/healthz`
-- HTTPS принудительно включен
-- Автоматический старт/стоп машин
+Бот работает только в webhook режиме. Переменная `WEBHOOK_URL` обязательна для запуска.
 
 ## Запуск
 
 ### Локальная разработка
 
-1. Установите зависимости:
+1. Установите переменные окружения:
 ```bash
-go mod tidy
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+export WEBHOOK_URL="https://your-domain.com"
+export WEBHOOK_PORT="8080"
+export WEBHOOK_SECRET_TOKEN="your_secret_token"
 ```
 
-2. Создайте `.env` файл с вашими настройками
-
-3. Запустите сервер:
+2. Запустите бота:
 ```bash
-go run .
+go run main.go
 ```
 
-4. Для тестирования webhook локально используйте ngrok:
+### С Docker
+
+1. Создайте файл `.env`:
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token
+WEBHOOK_URL=https://your-domain.com
+WEBHOOK_PORT=8080
+```
+
+2. Запустите с Docker Compose:
+```bash
+docker-compose up -d
+```
+
+### Для разработки с ngrok
+
+1. Установите ngrok: https://ngrok.com/
+
+2. Запустите туннель:
 ```bash
 ngrok http 8080
 ```
 
-5. Установите `WEBHOOK_URL` на полученный ngrok URL
-
-### Продакшн (Fly.io)
-
-1. Разверните на Fly.io:
+3. Скопируйте HTTPS URL из ngrok и установите переменную:
 ```bash
-fly deploy
+export WEBHOOK_URL="https://your-ngrok-url.ngrok.io"
 ```
 
-2. Установите секреты:
+4. Запустите бота:
 ```bash
-fly secrets set TELEGRAM_BOT_TOKEN=your_bot_token
-fly secrets set WEBHOOK_URL=https://your-app.fly.dev
+go run main.go
 ```
 
-## Тестирование
+## Эндпойнты
 
-### Тест HTTP сервера
+### `/telegram/webhook`
+- **Метод**: POST
+- **Content-Type**: application/json
+- **Описание**: Обрабатывает входящие webhook запросы от Telegram
 
-Запустите тестовый скрипт:
+### `/healthz`
+- **Метод**: GET
+- **Описание**: Health check эндпойнт
+- **Ответ**: JSON с статусом и URL webhook
 
+## Примеры
+
+### Тестирование health check
 ```bash
-go run cmd/test_server/main.go
+curl http://localhost:8080/healthz
 ```
 
-Этот скрипт проверит:
-- Доступность `/healthz`
-- Правильную обработку GET запросов к `/webhook`
-- Обработку POST запросов к `/webhook`
-
-### Проверка webhook
-
-1. Убедитесь, что сервер запущен
-2. Отправьте сообщение боту в Telegram
-3. Проверьте логи сервера на наличие webhook запросов
+### Тестирование webhook (локально)
+```bash
+curl -X POST http://localhost:8080/telegram/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"message":{"chat":{"id":123},"text":"test"}}'
+```
 
 ## Безопасность
 
-### Секретный токен
+- Сервер генерирует секретный токен для проверки webhook запросов
+- Рекомендуется использовать HTTPS в продакшене
+- Для разработки можно использовать HTTP с ngrok
 
-Сервер автоматически генерирует секретный токен для webhook и проверяет его в заголовке `X-Telegram-Bot-Api-Secret-Token`. Это обеспечивает дополнительную безопасность.
+## Логирование
 
-### HTTPS
-
-В продакшне всегда используйте HTTPS URL для webhook. Fly.io автоматически предоставляет SSL сертификаты.
-
-## Мониторинг
-
-### Health Check
-
-Эндпоинт `/healthz` возвращает JSON с информацией о состоянии сервера:
-
-```json
-{
-  "status": "healthy",
-  "webhook": "https://your-domain.com/webhook",
-  "port": "8080"
-}
-```
-
-### Логирование
-
-Сервер использует структурированное логирование с различными уровнями:
-- `debug` - детальная отладочная информация
-- `info` - основная информация о работе
-- `warn` - предупреждения
-- `error` - ошибки
-
-## Устранение неполадок
-
-### Webhook не устанавливается
-
-1. Проверьте, что `WEBHOOK_URL` начинается с `https://`
-2. Убедитесь, что сервер доступен из интернета
-3. Проверьте логи на наличие ошибок
-
-### Сообщения не обрабатываются
-
-1. Проверьте, что webhook установлен: `curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo`
-2. Убедитесь, что секретный токен правильно передается
-3. Проверьте логи сервера
-
-### Health check не проходит
-
-1. Убедитесь, что сервер запущен на порту 8080
-2. Проверьте, что эндпоинт `/healthz` доступен
-3. Проверьте конфигурацию в `fly.toml`
-
-## Структура проекта
-
-```
-.
-├── main.go              # Основная точка входа
-├── webhook.go           # Webhook сервер
-├── config.go            # Конфигурация
-├── fly.toml            # Конфигурация Fly.io
-├── cmd/
-│   └── test_server/    # Тестовый клиент
-└── WEBHOOK_SETUP.md    # Эта документация
-```
+Бот логирует все входящие webhook запросы и ошибки. Уровень логирования можно настроить через переменную `LOG_LEVEL`:
+- `debug` - подробное логирование
+- `info` - стандартное логирование (по умолчанию)
+- `warn` - только предупреждения и ошибки
+- `error` - только ошибки
