@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"testing"
@@ -47,7 +47,7 @@ func TestGetLocale(t *testing.T) {
 				},
 			}
 
-			locale := getLocale(message)
+			locale := GetLocale(message)
 			expectedLocale := locales[tt.expectedLocale]
 
 			// Проверяем, что полученная локализация соответствует ожидаемой
@@ -119,7 +119,7 @@ func TestDefaultLocale(t *testing.T) {
 		},
 	}
 
-	locale := getLocale(message)
+	locale := GetLocale(message)
 	expectedLocale := locales["en"]
 
 	if locale.WelcomeMessage != expectedLocale.WelcomeMessage {
@@ -133,7 +133,7 @@ func TestNilUser(t *testing.T) {
 		From: nil,
 	}
 
-	locale := getLocale(message)
+	locale := GetLocale(message)
 	expectedLocale := locales["en"]
 
 	if locale.WelcomeMessage != expectedLocale.WelcomeMessage {

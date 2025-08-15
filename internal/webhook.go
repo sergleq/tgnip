@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"crypto/tls"
@@ -86,7 +86,7 @@ func (ws *WebhookServer) startHTTPS(certFile, keyFile string) error {
 
 	// Устанавливаем webhook только для HTTPS
 	if strings.HasPrefix(ws.webhookURL, "https://") {
-		if err := ws.setWebhook(); err != nil {
+		if err := ws.SetWebhook(); err != nil {
 			return fmt.Errorf("ошибка установки webhook: %w", err)
 		}
 	}
@@ -135,7 +135,7 @@ func (ws *WebhookServer) Stop() error {
 }
 
 // setWebhook устанавливает webhook в Telegram
-func (ws *WebhookServer) setWebhook() error {
+func (ws *WebhookServer) SetWebhook() error {
 	webhookURL := ws.webhookURL + "/webhook"
 
 	// Создаем webhook конфигурацию
@@ -208,7 +208,7 @@ func (ws *WebhookServer) handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Обрабатываем сообщение напрямую только если бот доступен
 	if ws.bot != nil {
-		handleMessage(ws.bot, update.Message)
+		HandleMessage(ws.bot, update.Message)
 	} else {
 		logger.Debug("Bot не доступен, пропускаем обработку сообщения")
 	}

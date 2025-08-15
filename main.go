@@ -7,6 +7,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+
+	"tgnip/internal"
 )
 
 var logger *logrus.Logger
@@ -19,6 +21,9 @@ func init() {
 		FullTimestamp: true,
 	})
 
+	// Устанавливаем логгер для internal пакета
+	internal.SetLogger(logger)
+
 	// Загрузка переменных окружения
 	if err := godotenv.Load(); err != nil {
 		logger.Warn("Файл .env не найден, используем переменные окружения системы")
@@ -27,7 +32,7 @@ func init() {
 
 func main() {
 	// Загрузка конфигурации
-	config := LoadConfig()
+	config := internal.LoadConfig()
 
 	// Настройка уровня логирования
 	switch config.LogLevel {
@@ -61,7 +66,7 @@ func main() {
 	if webhookURL != "" {
 		// Webhook режим
 		logger.Info("Запуск в webhook режиме")
-		webhookServer := NewWebhookServer(bot, config)
+		webhookServer := internal.NewWebhookServer(bot, config)
 
 		if err := webhookServer.Start(); err != nil {
 			logger.Fatal("Ошибка запуска webhook сервера: ", err)
@@ -70,7 +75,7 @@ func main() {
 
 		// Если это HTTPS URL, устанавливаем webhook автоматически
 		if strings.HasPrefix(webhookURL, "https://") {
-			if err := webhookServer.setWebhook(); err != nil {
+			if err := webhookServer.SetWebhook(); err != nil {
 				logger.Fatal("Ошибка установки webhook: ", err)
 			}
 		}
@@ -94,80 +99,7 @@ func main() {
 			}
 
 			// Обрабатываем сообщение напрямую
-			handleMessage(bot, update.Message)
+			internal.HandleMessage(bot, update.Message)
 		}
 	}
-}
-
-func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	// Обработка команды /start
-	if message.IsCommand() && message.Command() == "start" {
-		handleStartCommand(bot, message)
-		return
-	}
-
-	// Обработка ссылок
-	if message.Text != "" {
-		handleURLMessage(bot, message)
-	}
-}
-
-func handleStartCommand(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	locale := getLocale(message)
-	msg := tgbotapi.NewMessage(message.Chat.ID, locale.WelcomeMessage)
-	bot.Send(msg)
-}
-
-func handleURLMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message) {
-	locale := getLocale(message)
-	url := message.Text
-
-	// Проверка, что это действительно ссылка
-	if !isValidURL(url) {
-		msg := tgbotapi.NewMessage(message.Chat.ID, locale.InvalidURLMessage)
-		bot.Send(msg)
-		return
-	}
-
-	// Отправляем сообщение о начале обработки
-	processingMsg := tgbotapi.NewMessage(message.Chat.ID, locale.ProcessingMessage)
-	sentMsg, err := bot.Send(processingMsg)
-	if err != nil {
-		logger.Errorf("Ошибка при отправке сообщения о обработке: %v", err)
-	}
-
-	// Извлекаем контент
-	content, err := extractContent(url)
-	if err != nil {
-		logger.Errorf("Ошибка при извлечении контента: %v", err)
-		errorMsg := tgbotapi.NewMessage(message.Chat.ID, locale.ErrorProcessingMsg)
-		bot.Send(errorMsg)
-		return
-	}
-
-	// Конвертируем в markdown
-	markdown := convertToMarkdown(content, url, locale)
-
-	// Создаем файл
-	filename := generateFilename(url, content.Title)
-	file := tgbotapi.NewDocument(message.Chat.ID, tgbotapi.FileBytes{
-		Name:  filename,
-		Bytes: []byte(markdown),
-	})
-
-	// Отправляем файл
-	if _, err := bot.Send(file); err != nil {
-		logger.Errorf("Ошибка при отправке файла: %v", err)
-		errorMsg := tgbotapi.NewMessage(message.Chat.ID, locale.ErrorSendingMsg)
-		bot.Send(errorMsg)
-		return
-	}
-
-	// Удаляем сообщение о обработке
-	if sentMsg.MessageID != 0 {
-		deleteMsg := tgbotapi.NewDeleteMessage(message.Chat.ID, sentMsg.MessageID)
-		bot.Send(deleteMsg)
-	}
-
-	logger.Infof("Файл успешно отправлен пользователю %d", message.Chat.ID)
 }

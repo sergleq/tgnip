@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"strings"
@@ -88,7 +88,7 @@ Just send a link!`,
 }
 
 // getLocale определяет язык пользователя и возвращает соответствующую локализацию
-func getLocale(message *tgbotapi.Message) Locale {
+func GetLocale(message *tgbotapi.Message) Locale {
 	// Проверяем язык пользователя
 	if message.From != nil && message.From.LanguageCode != "" {
 		lang := strings.ToLower(message.From.LanguageCode)

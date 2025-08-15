@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"os"
@@ -19,6 +19,13 @@ type Config struct {
 
 	// Логирование
 	LogLevel string
+
+	// Ethical scraping
+	UserAgent         string
+	ContactEmail      string
+	WhitelistDomains  string
+	RateLimitInterval int // в секундах
+	CacheTTL          int // в часах
 }
 
 // LoadConfig загружает конфигурацию из переменных окружения
@@ -63,6 +70,41 @@ func LoadConfig() *Config {
 
 	if val := os.Getenv("SSL_KEY_FILE"); val != "" {
 		config.SSLKeyFile = val
+	}
+
+	// Ethical scraping настройки
+	if val := os.Getenv("USER_AGENT"); val != "" {
+		config.UserAgent = val
+	} else {
+		config.UserAgent = "TGNIP-Bot/1.0 (+https://github.com/sergleq/tgnip)"
+	}
+
+	if val := os.Getenv("CONTACT_EMAIL"); val != "" {
+		config.ContactEmail = val
+	}
+
+	if val := os.Getenv("WHITELIST_DOMAINS"); val != "" {
+		config.WhitelistDomains = val
+	}
+
+	if val := os.Getenv("RATE_LIMIT_INTERVAL"); val != "" {
+		if interval, err := strconv.Atoi(val); err == nil && interval > 0 {
+			config.RateLimitInterval = interval
+		} else {
+			config.RateLimitInterval = 1 // по умолчанию 1 секунда
+		}
+	} else {
+		config.RateLimitInterval = 1
+	}
+
+	if val := os.Getenv("CACHE_TTL"); val != "" {
+		if ttl, err := strconv.Atoi(val); err == nil && ttl > 0 {
+			config.CacheTTL = ttl
+		} else {
+			config.CacheTTL = 24 // по умолчанию 24 часа
+		}
+	} else {
+		config.CacheTTL = 24
 	}
 
 	return config

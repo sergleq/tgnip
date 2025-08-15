@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"fmt"
@@ -12,6 +12,8 @@ import (
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
 	readability "github.com/go-shiori/go-readability"
+	"github.com/gocolly/colly/v2"
+	"github.com/gocolly/colly/v2/extensions"
 )
 
 // Content представляет извлеченный контент
@@ -23,9 +25,178 @@ type Content struct {
 	Date     string
 }
 
-// extractContent извлекает контент из веб-страницы
-func extractContent(pageURL string) (*Content, error) {
+// CollyConfig содержит конфигурацию для Colly
+type CollyConfig struct {
+	UserAgent      string
+	Timeout        time.Duration
+	MaxRetries     int
+	FollowRedirect bool
+	RespectRobots  bool
+}
+
+// DefaultCollyConfig возвращает конфигурацию по умолчанию
+func DefaultCollyConfig() *CollyConfig {
+	return &CollyConfig{
+		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		Timeout:        30 * time.Second,
+		MaxRetries:     3,
+		FollowRedirect: true,
+		RespectRobots:  false,
+	}
+}
+
+// createCollyCollector создает и настраивает коллектор Colly
+func createCollyCollector(config *CollyConfig) *colly.Collector {
+	c := colly.NewCollector(
+		colly.UserAgent(config.UserAgent),
+		colly.AllowURLRevisit(),
+		colly.MaxDepth(1),
+	)
+
+	// Настройка таймаута
+	c.SetRequestTimeout(config.Timeout)
+
+	// Настройка лимитов
+	c.Limit(&colly.LimitRule{
+		DomainGlob:  "*",
+		Parallelism: 1,
+		RandomDelay: 1 * time.Second,
+	})
+
+	// Добавляем расширения
+	extensions.RandomUserAgent(c)
+	extensions.Referer(c)
+
+	// Настройка обработки ошибок
+	c.OnError(func(r *colly.Response, err error) {
+		fmt.Printf("Ошибка при загрузке %s: %v\n", r.Request.URL, err)
+	})
+
+	// Настройка обработки редиректов
+	if config.FollowRedirect {
+		// Colly автоматически обрабатывает редиректы, но мы можем настроить лимиты
+		c.Limit(&colly.LimitRule{
+			DomainGlob:  "*",
+			Parallelism: 1,
+			RandomDelay: 1 * time.Second,
+			Delay:       2 * time.Second,
+		})
+	}
+
+	return c
+}
+
+// ExtractContent извлекает контент из веб-страницы с использованием Colly
+func ExtractContent(pageURL string) (*Content, error) {
+	return ExtractContentWithConfig(pageURL, DefaultCollyConfig())
+}
+
+// ExtractContentWithConfig извлекает контент с пользовательской конфигурацией
+func ExtractContentWithConfig(pageURL string, config *CollyConfig) (*Content, error) {
 	fmt.Printf("Извлекаю контент из: %s\n", pageURL)
+
+	// Создаем коллектор Colly
+	c := createCollyCollector(config)
+
+	// Переменные для хранения данных
+	var htmlContent string
+	var finalURL string
+	var loadError error
+
+	// Настраиваем обработчик для получения HTML
+	c.OnResponse(func(r *colly.Response) {
+		finalURL = r.Request.URL.String()
+		htmlContent = string(r.Body)
+		fmt.Printf("Успешно загружена страница: %s (размер: %d байт)\n", finalURL, len(htmlContent))
+	})
+
+	// Настраиваем обработчик ошибок
+	c.OnError(func(r *colly.Response, err error) {
+		loadError = fmt.Errorf("ошибка при загрузке %s: %w", r.Request.URL, err)
+	})
+
+	// Выполняем запрос
+	err := c.Visit(pageURL)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при посещении страницы: %w", err)
+	}
+
+	// Проверяем ошибки загрузки
+	if loadError != nil {
+		return nil, loadError
+	}
+
+	// Проверяем, что контент загружен
+	if htmlContent == "" {
+		return nil, fmt.Errorf("не удалось загрузить контент страницы")
+	}
+
+	// Парсим HTML с помощью goquery для извлечения метаданных
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при парсинге HTML: %w", err)
+	}
+
+	// Парсим URL для go-readability
+	parsedURL, err := url.Parse(finalURL)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при парсинге URL: %w", err)
+	}
+
+	// Извлекаем контент с помощью go-readability
+	article, err := readability.FromReader(strings.NewReader(htmlContent), parsedURL)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка при извлечении контента: %w", err)
+	}
+
+	// Создаем объект контента
+	content := &Content{
+		URL: finalURL,
+	}
+
+	// Извлекаем заголовок (приоритет go-readability, затем fallback)
+	if article.Title != "" {
+		content.Title = article.Title
+	} else {
+		content.Title = extractTitle(doc)
+	}
+
+	// Извлекаем основной текст и конвертируем в markdown
+	content.Markdown = extractAndConvertToMarkdown(article)
+
+	// Извлекаем автора
+	if article.Byline != "" {
+		content.Author = article.Byline
+	} else {
+		content.Author = extractAuthor(doc)
+	}
+
+	// Извлекаем дату
+	content.Date = extractDate(doc)
+
+	fmt.Printf("Извлечено: заголовок='%s', длина markdown=%d символов\n",
+		content.Title, len(content.Markdown))
+
+	return content, nil
+}
+
+// ExtractContentWithFallback извлекает контент с fallback на стандартный HTTP клиент
+func ExtractContentWithFallback(pageURL string) (*Content, error) {
+	// Сначала пробуем с Colly
+	content, err := ExtractContent(pageURL)
+	if err == nil {
+		return content, nil
+	}
+
+	fmt.Printf("Colly не удалось загрузить страницу, пробуем fallback: %v\n", err)
+
+	// Fallback на стандартный HTTP клиент
+	return extractContentWithHTTPClient(pageURL)
+}
+
+// extractContentWithHTTPClient извлекает контент с помощью стандартного HTTP клиента
+func extractContentWithHTTPClient(pageURL string) (*Content, error) {
+	fmt.Printf("Использую fallback HTTP клиент для: %s\n", pageURL)
 
 	// Создаем HTTP клиент с таймаутом
 	client := &http.Client{
@@ -92,7 +263,7 @@ func extractContent(pageURL string) (*Content, error) {
 	// Извлекаем дату
 	content.Date = extractDate(doc)
 
-	fmt.Printf("Извлечено: заголовок='%s', длина markdown=%d символов\n",
+	fmt.Printf("Извлечено (fallback): заголовок='%s', длина markdown=%d символов\n",
 		content.Title, len(content.Markdown))
 
 	return content, nil
@@ -217,7 +388,7 @@ func cleanText(text string) string {
 }
 
 // isValidURL проверяет, является ли строка валидной URL
-func isValidURL(str string) bool {
+func IsValidURL(str string) bool {
 	u, err := url.Parse(str)
 	return err == nil && u.Scheme != "" && u.Host != ""
 }

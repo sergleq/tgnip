@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"testing"
@@ -19,7 +19,7 @@ func TestLanguageDetector(t *testing.T) {
 Here's a Go example:
 
 ` + "```" + `go
-package main
+package internal
 
 import "fmt"
 

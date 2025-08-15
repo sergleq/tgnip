@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"strings"
@@ -24,7 +24,7 @@ func TestIsValidURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isValidURL(tt.url)
+			result := IsValidURL(tt.url)
 			if result != tt.expected {
 				t.Errorf("isValidURL(%s) = %v, want %v", tt.url, result, tt.expected)
 			}
@@ -245,7 +245,7 @@ func TestGenerateFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateFilename(tt.url, tt.title)
+			result := GenerateFilename(tt.url, tt.title)
 			if result != tt.expected {
 				t.Errorf("generateFilename(%s, %s) = %v, want %v", tt.url, tt.title, result, tt.expected)
 			}
@@ -390,7 +390,7 @@ func TestConvertToMarkdownLocalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToMarkdown(content, "https://example.com/article", tt.locale)
+			result := ConvertToMarkdown(content, "https://example.com/article", tt.locale)
 
 			for _, expected := range tt.expected {
 				if !strings.Contains(result, expected) {

@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bytes"
@@ -8,7 +8,14 @@ import (
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/sirupsen/logrus"
 )
+
+func init() {
+	// Инициализируем логгер для тестов
+	logger = logrus.New()
+	logger.SetLevel(logrus.ErrorLevel) // Только ошибки в тестах
+}
 
 func TestWebhookHealthEndpoint(t *testing.T) {
 	// Создаем мок бота и конфигурации

@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 // convertToMarkdown конвертирует контент в markdown формат
-func convertToMarkdown(content *Content, originalURL string, locale Locale) string {
+func ConvertToMarkdown(content *Content, originalURL string, locale Locale) string {
 	var markdown strings.Builder
 
 	// Заголовок
@@ -133,7 +133,7 @@ func isValidFilename(filename string) bool {
 }
 
 // generateFilename генерирует имя файла для markdown документа
-func generateFilename(originalURL string, title string) string {
+func GenerateFilename(originalURL string, title string) string {
 	// Если есть заголовок статьи, используем его для имени файла
 	if title != "" && title != "Без заголовка" {
 		// Очищаем заголовок от недопустимых символов

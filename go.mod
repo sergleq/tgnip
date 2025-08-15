@@ -1,28 +1,42 @@
 module tgnip
 
-go 1.22
+go 1.23.0
 
-toolchain go1.22.2
+toolchain go1.24.6
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.4.2
-	github.com/PuerkitoBio/goquery v1.8.1
+	github.com/PuerkitoBio/goquery v1.10.2
 	github.com/go-shiori/go-readability v0.0.0-20231029095239-6b97d5aba789
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/gocolly/colly/v2 v2.2.0
 	github.com/joho/godotenv v1.4.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/src-d/enry/v2 v2.1.0
-	github.com/yuin/goldmark v1.7.6
+	golang.org/x/net v0.37.0
 )
 
 require (
-	github.com/andybalholm/cascadia v1.3.2 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/antchfx/htmlquery v1.3.4 // indirect
+	github.com/antchfx/xmlquery v1.4.4 // indirect
+	github.com/antchfx/xpath v1.3.3 // indirect
+	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/go-shiori/dom v0.0.0-20210627111528-4e4722cd0d65 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/kennygrant/sanitize v1.2.4 // indirect
+	github.com/nlnwa/whatwg-url v0.6.1 // indirect
+	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
 	github.com/src-d/go-oniguruma v1.1.0 // indirect
+	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/toqueteos/trie v1.0.0 // indirect
-	golang.org/x/net v0.18.0 // indirect
-	golang.org/x/sys v0.14.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	github.com/yuin/goldmark v1.7.6 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
+	google.golang.org/appengine v1.6.8 // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/toqueteos/substring.v1 v1.0.2 // indirect
 )

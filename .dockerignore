@@ -1,55 +1,43 @@
+# flyctl launch added from .gitignore
 # Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
 
 # Test binary, built with `go test -c`
-*.test
+**/*.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
-*.out
+**/*.out
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
 # Go workspace file
-go.work
+**/go.work
 
 # Environment variables
-.env
-.env.local
-.env.production
+**/.env
+**/.env.local
+**/.env.production
 
 # Logs
-logs/
-*.log
+**/logs
+**/*.log
 
 # IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
+**/.vscode
+**/.idea
+**/*.swp
+**/*.swo
 
 # OS files
-.DS_Store
-Thumbs.db
+**/.DS_Store
+**/Thumbs.db
 
 # Build artifacts
-main
-tgnip
-tgnip_ethical
-encoding_test
-test_server
-
-# Temporary files
-*.tmp
-*.temp
-
-# Coverage reports
-coverage.txt
-coverage.html
-
-# Air live reload
-tmp/
+**/main
+**/tgnip
+fly.toml
